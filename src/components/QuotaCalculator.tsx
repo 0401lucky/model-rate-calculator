@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { calculateQuotaConsumption, type QuotaCalculationResult } from '../lib/calculator';
+import { calculateQuotaConsumption, USD_TO_QUOTA, type QuotaCalculationResult } from '../lib/calculator';
 import modelData from '../data/models.json';
 
 const QuotaCalculator: React.FC = () => {
@@ -12,12 +12,40 @@ const QuotaCalculator: React.FC = () => {
   
   const [result, setResult] = useState<QuotaCalculationResult | null>(null);
 
+  // 配额换算器状态
+  const [quotaInput, setQuotaInput] = useState<string>('500000');
+  const [usdInput, setUsdInput] = useState<string>('1');
+  
+  // 复制状态
+  const [copied, setCopied] = useState<boolean>(false);
+
   // Initialize with first model
   useEffect(() => {
     if (modelData.models.length > 0 && !selectedModel) {
       handleModelSelect(modelData.models[0].id);
     }
   }, []);
+
+  // 配额换算：当配额输入变化时更新美元
+  const handleQuotaChange = (value: string) => {
+    setQuotaInput(value);
+    const quota = parseFloat(value) || 0;
+    setUsdInput((quota / USD_TO_QUOTA).toFixed(6));
+  };
+
+  // 配额换算：当美元输入变化时更新配额
+  const handleUsdChange = (value: string) => {
+    setUsdInput(value);
+    const usd = parseFloat(value) || 0;
+    setQuotaInput(Math.round(usd * USD_TO_QUOTA).toString());
+  };
+
+  // 复制配额到剪贴板
+  const copyQuota = () => {
+    navigator.clipboard.writeText(quotaInput);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleModelSelect = (modelId: string) => {
     setSelectedModel(modelId);
@@ -210,6 +238,82 @@ const QuotaCalculator: React.FC = () => {
           <div className="mt-6 bg-gray-50 rounded-lg p-3 text-xs text-slate-500 font-mono overflow-x-auto whitespace-nowrap border border-gray-100">
             (Input + Output × Completion) × Model × Group
           </div>
+        </div>
+
+        {/* 配额/美元换算器 */}
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200 shadow-sm">
+          <h3 className="text-sm font-semibold text-emerald-800 mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            配额/美元换算
+            <span className="text-xs font-normal text-emerald-600 ml-auto">1 USD = 500,000 配额</span>
+          </h3>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="group">
+              <label className="block text-xs font-semibold text-emerald-600 mb-1.5 uppercase tracking-wide">配额点数</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={quotaInput}
+                  onChange={(e) => handleQuotaChange(e.target.value)}
+                  className="w-full bg-white border border-emerald-200 rounded-lg py-2.5 px-3 pr-12 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono shadow-sm"
+                  placeholder="500000"
+                />
+                <button
+                  onClick={copyQuota}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-emerald-100 text-emerald-600 transition-colors"
+                  title="复制配额值"
+                >
+                  {copied ? (
+                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <div className="group">
+              <label className="block text-xs font-semibold text-emerald-600 mb-1.5 uppercase tracking-wide">美元 (USD)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 font-medium">$</span>
+                <input
+                  type="number"
+                  value={usdInput}
+                  onChange={(e) => handleUsdChange(e.target.value)}
+                  className="w-full bg-white border border-emerald-200 rounded-lg py-2.5 pl-7 pr-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono shadow-sm"
+                  placeholder="1.00"
+                  step="0.01"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[1, 5, 10, 20, 50, 100].map(usd => (
+              <button
+                key={usd}
+                onClick={() => handleUsdChange(usd.toString())}
+                className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-all ${
+                  parseFloat(usdInput) === usd
+                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm'
+                    : 'bg-white border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50'
+                }`}
+              >
+                ${usd}
+              </button>
+            ))}
+          </div>
+          
+          <p className="mt-3 text-xs text-emerald-600/80">
+            💡 输入美元金额快速获取配额值，点击复制按钮可直接粘贴到 New API
+          </p>
         </div>
       </div>
     </div>
