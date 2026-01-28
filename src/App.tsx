@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ModelRateLookup from './components/ModelRateLookup';
 import QuotaCalculator from './components/QuotaCalculator';
 import RateConverter from './components/RateConverter';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'lookup' | 'calculator'>('lookup');
@@ -69,13 +70,15 @@ function App() {
         </div>
 
         {/* Content Area */}
-        <div className="min-h-[500px]">
-          {activeTab === 'lookup' ? (
-            <ModelRateLookup />
-          ) : (
-            <QuotaCalculator />
-          )}
-        </div>
+        <ErrorBoundary>
+          <div className="min-h-[500px]">
+            {activeTab === 'lookup' ? (
+              <ModelRateLookup />
+            ) : (
+              <QuotaCalculator />
+            )}
+          </div>
+        </ErrorBoundary>
 
         {/* Footer */}
         <footer className="mt-20 border-t border-gray-200 pt-8 text-center text-slate-400 text-sm">
