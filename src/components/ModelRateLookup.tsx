@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import modelData from '../data/models.json';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface Model {
   id: string;
@@ -9,39 +10,129 @@ interface Model {
   newApiRates: { modelRatio: number; completionRatio: number; };
 }
 
+// 提取表格行组件并使用 memo 优化
+const ModelTableRow = memo(({ model }: { model: Model }) => (
+  <tr className="hover:bg-gray-50/80 transition-colors group">
+    <td className="px-6 py-4 whitespace-nowrap">
+      <div className="flex items-center">
+        <div className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition-colors">{model.name}</div>
+      </div>
+      <div className="text-xs text-slate-500 font-mono mt-0.5">{model.id}</div>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap">
+      <ProviderBadge provider={model.provider} />
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-500 font-mono">
+      <div>In: <span className="text-slate-700 font-medium">${model.cost.input.toFixed(2)}</span></div>
+      <div>Out: <span className="text-slate-700 font-medium">${model.cost.output.toFixed(2)}</span></div>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-indigo-600 font-mono bg-indigo-50/50">
+      {model.newApiRates.modelRatio.toFixed(2)}
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-blue-600 font-mono bg-blue-50/50">
+      {model.newApiRates.completionRatio.toFixed(2)}
+    </td>
+  </tr>
+));
+ModelTableRow.displayName = 'ModelTableRow';
+
+// 提取移动端卡片组件并使用 memo 优化
+const ModelCard = memo(({ model }: { model: Model }) => (
+  <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm space-y-4">
+    <div className="flex justify-between items-start">
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900">{model.name}</h3>
+        <p className="text-xs text-slate-500 font-mono">{model.id}</p>
+      </div>
+      <ProviderBadge provider={model.provider} size="small" />
+    </div>
+    
+    <div className="grid grid-cols-2 gap-3 text-sm">
+      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+        <div className="text-slate-400 text-xs mb-1 uppercase font-bold">官方价格 ($/1M)</div>
+        <div className="flex justify-between font-mono text-slate-700 text-xs">
+          <span>In:</span> <span className="font-semibold">${model.cost.input.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between font-mono text-slate-700 text-xs">
+          <span>Out:</span> <span className="font-semibold">${model.cost.output.toFixed(2)}</span>
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <div className="bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex justify-between items-center">
+          <span className="text-xs text-indigo-700 font-medium">模型倍率</span>
+          <span className="font-bold text-indigo-700 font-mono">{model.newApiRates.modelRatio.toFixed(2)}</span>
+        </div>
+        <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 flex justify-between items-center">
+          <span className="text-xs text-blue-700 font-medium">补全倍率</span>
+          <span className="font-bold text-blue-700 font-mono">{model.newApiRates.completionRatio.toFixed(2)}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+));
+ModelCard.displayName = 'ModelCard';
+
+// 提取 Provider Badge 组件
+const ProviderBadge = memo(({ provider, size = 'normal' }: { provider: string; size?: 'small' | 'normal' }) => {
+  const colorClasses = 
+    provider === 'OpenAI' ? 'bg-green-50 text-green-700 border-green-200' : 
+    provider === 'Anthropic' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+    provider === 'Google' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+    'bg-gray-100 text-slate-700 border-gray-200';
+  
+  const sizeClasses = size === 'small' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs leading-5';
+  
+  return (
+    <span className={`${sizeClasses} inline-flex font-medium rounded-full border ${colorClasses}`}>
+      {provider}
+    </span>
+  );
+});
+ProviderBadge.displayName = 'ProviderBadge';
+
 const ModelRateLookup: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>('All');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'newApiRates.modelRatio', direction: 'desc' });
 
+  // 防抖处理搜索词，避免频繁过滤
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   const providers = ['All', ...modelData.providers];
 
   const filteredModels = useMemo(() => {
     return modelData.models.filter(model => {
-      const matchesSearch = model.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          model.id.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = model.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || 
+                          model.id.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
       const matchesProvider = selectedProvider === 'All' || model.provider === selectedProvider;
       return matchesSearch && matchesProvider;
     }).sort((a, b) => {
-      let aValue: any = a;
-      let bValue: any = b;
-      
-      if (sortConfig.key === 'cost.input') {
-        aValue = a.cost.input;
-        bValue = b.cost.input;
-      } else if (sortConfig.key === 'newApiRates.modelRatio') {
-        aValue = a.newApiRates.modelRatio;
-        bValue = b.newApiRates.modelRatio;
-      } else {
-        aValue = a[sortConfig.key as keyof Model];
-        bValue = b[sortConfig.key as keyof Model];
-      }
+      const getSortValue = (model: Model): number | string => {
+        switch (sortConfig.key) {
+          case 'cost.input':
+            return model.cost.input;
+          case 'newApiRates.modelRatio':
+            return model.newApiRates.modelRatio;
+          case 'newApiRates.completionRatio':
+            return model.newApiRates.completionRatio;
+          case 'name':
+            return model.name;
+          case 'provider':
+            return model.provider;
+          default:
+            return model.name;
+        }
+      };
+
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
 
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [searchTerm, selectedProvider, sortConfig]);
+  }, [debouncedSearchTerm, selectedProvider, sortConfig]);
 
   const handleSort = (key: string) => {
     setSortConfig(current => ({
@@ -138,33 +229,7 @@ const ModelRateLookup: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
             {filteredModels.map((model) => (
-              <tr key={model.id} className="hover:bg-gray-50/80 transition-colors group">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition-colors">{model.name}</div>
-                  </div>
-                  <div className="text-xs text-slate-500 font-mono mt-0.5">{model.id}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-medium rounded-full border 
-                    ${model.provider === 'OpenAI' ? 'bg-green-50 text-green-700 border-green-200' : 
-                      model.provider === 'Anthropic' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                      model.provider === 'Google' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                      'bg-gray-100 text-slate-700 border-gray-200'}`}>
-                    {model.provider}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-500 font-mono">
-                  <div>In: <span className="text-slate-700 font-medium">${model.cost.input.toFixed(2)}</span></div>
-                  <div>Out: <span className="text-slate-700 font-medium">${model.cost.output.toFixed(2)}</span></div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-indigo-600 font-mono bg-indigo-50/50">
-                  {model.newApiRates.modelRatio.toFixed(2)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-blue-600 font-mono bg-blue-50/50">
-                  {model.newApiRates.completionRatio.toFixed(2)}
-                </td>
-              </tr>
+              <ModelTableRow key={model.id} model={model} />
             ))}
           </tbody>
         </table>
@@ -173,44 +238,7 @@ const ModelRateLookup: React.FC = () => {
       {/* Mobile Card View */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {filteredModels.map((model) => (
-          <div key={model.id} className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">{model.name}</h3>
-                <p className="text-xs text-slate-500 font-mono">{model.id}</p>
-              </div>
-              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border
-                ${model.provider === 'OpenAI' ? 'bg-green-50 text-green-700 border-green-200' : 
-                  model.provider === 'Anthropic' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                  model.provider === 'Google' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                  'bg-gray-100 text-slate-700 border-gray-200'}`}>
-                {model.provider}
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <div className="text-slate-400 text-xs mb-1 uppercase font-bold">官方价格 ($/1M)</div>
-                <div className="flex justify-between font-mono text-slate-700 text-xs">
-                  <span>In:</span> <span className="font-semibold">${model.cost.input.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-mono text-slate-700 text-xs">
-                  <span>Out:</span> <span className="font-semibold">${model.cost.output.toFixed(2)}</span>
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex justify-between items-center">
-                  <span className="text-xs text-indigo-700 font-medium">模型倍率</span>
-                  <span className="font-bold text-indigo-700 font-mono">{model.newApiRates.modelRatio.toFixed(2)}</span>
-                </div>
-                <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 flex justify-between items-center">
-                  <span className="text-xs text-blue-700 font-medium">补全倍率</span>
-                  <span className="font-bold text-blue-700 font-mono">{model.newApiRates.completionRatio.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ModelCard key={model.id} model={model} />
         ))}
       </div>
       
